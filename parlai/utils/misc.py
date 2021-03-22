@@ -292,26 +292,6 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-class NoLock(object):
-    """
-    Empty `lock`.
-
-    Does nothing when you enter or exit.
-    """
-
-    def __enter__(self):
-        """
-        No-op.
-        """
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        """
-        No-op.
-        """
-        pass
-
-
 class SimpleCounter:
     """
     Simple counter object.
@@ -472,16 +452,6 @@ def round_sigfigs(x: Union[float, 'torch.Tensor'], sigfigs=4) -> float:
             return x_
         else:
             raise ex
-
-
-single_nolock = NoLock()
-
-
-def no_lock():
-    """
-    Build a nolock for other classes to use for no-op locking.
-    """
-    return single_nolock
 
 
 def clip_text(text, max_len):
@@ -689,6 +659,11 @@ def str_to_msg(txt, ignore_fields=''):
             or key == 'text_candidates'
         ):
             return tolist(value)
+        elif key == 'reward':
+            try:
+                return int(value)
+            except ValueError:
+                return float(value)
         elif key == 'episode_done':
             return bool(value)
         else:
