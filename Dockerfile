@@ -11,7 +11,7 @@ COPY ./requirements.txt ./requirements.txt
 COPY ./parlai ./parlai
 COPY ./parlai.egg-info ./parlai.egg-info
 COPY ./projects ./projects
-COPY ./tmp/1Bdistill_model ./tmp/1Bdistill_model
+COPY ./tmp/1Bdistill_2 ./tmp/1Bdistill_model
 
 RUN python3.8 -m pip install --upgrade pip
 RUN python3.8 -m pip install -r requirements.txt

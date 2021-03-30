@@ -100,6 +100,19 @@ class RewardUnlikelihoodAgentTrait(object):
             * mle_notnull.float()
         ).sum()
 
+        _mle_loss = torch.mv(
+           (F.nll_loss(
+                scores_view, targets_view, ignore_index=self.NULL_IDX, reduction='none'
+            ).view_as(mle_notnull)
+            * mle_notnull.float()).T,
+            batch.rewards
+        ).sum()
+
+        # print(mle_loss)
+        # print(_mle_loss)
+
+        # print(f'rewards: {batch.rewards}\nmle_loss: {mle_loss}\nmod_nll_loss: {_nll_loss}')
+
         # limit loss to only the positive rewards
         mle_target_tokens = mle_notnull.long().sum()
         correct = ((targets == preds) * mle_notnull).sum()
@@ -127,9 +140,23 @@ class RewardUnlikelihoodAgentTrait(object):
             )
             * ul_notnull.float()
         ).sum()
+
+        _ul_loss = torch.mv(
+            (torch.log(torch.clamp(1.0 - ul_scores.exp(), min=clamp_min)).view_as(
+                ul_notnull
+            )
+            * ul_notnull.float()).T,
+            batch.rewards
+        ).sum()
+
+        # print(ul_loss)
+        # print(_ul_loss)
+
         self.global_metrics.add('ul_loss', AverageMetric(ul_loss, ul_target_tokens))
         if ul_target_tokens > 0:
             ul_loss /= ul_target_tokens
+
+        print(self.opt['alpha'])
 
         loss = mle_loss + self.opt['alpha'] * ul_loss
 

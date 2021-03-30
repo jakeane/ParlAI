@@ -13,12 +13,12 @@ opt:
   models:
     blender_90M:
       model: transformer/generator
-      model_file: tmp/1Bdistill_model/1Bdistill_1.checkpoint # tmp/unl_app_1/unl_app_1 #
+      model_file: tmp/1Bdistill_model/1Bdistill_2.checkpoint # tmp/unl_app_1/unl_app_1 #
       interactive_mode: True
       no_cuda: True
   override:
     model: tmp/1Bdistill_model # tmp/unl_app_1 #
-    model_file: tmp/1Bdistill_model/1Bdistill_1.checkpoint  # tmp/unl_app_1/unl_app_1 # 
+    model_file: tmp/1Bdistill_model/1Bdistill_2.checkpoint  # tmp/unl_app_1/unl_app_1 # 
 additional_args:
   page_id: 1 # Configure Your Own Page
 
