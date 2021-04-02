@@ -7,18 +7,14 @@ tasks:
 task_name: blended_skill_talk_therapy
 world_module: parlai.chat_service.tasks.chatbot.worlds
 overworld: MessengerOverworld
-max_workers: 30
+max_workers: 200
 opt:
   debug: True
   models:
-    blender_90M:
+    blender_1Bdistill:
       model: transformer/generator
       model_file: tmp/1Bdistill_model/1Bdistill_2.checkpoint # tmp/unl_app_1/unl_app_1 #
       interactive_mode: True
-      no_cuda: True
-  override:
-    model: tmp/1Bdistill_model # tmp/unl_app_1 #
-    model_file: tmp/1Bdistill_model/1Bdistill_2.checkpoint  # tmp/unl_app_1/unl_app_1 # 
 additional_args:
   page_id: 1 # Configure Your Own Page
 
