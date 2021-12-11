@@ -41,7 +41,7 @@ class AgentState:
         self.stored_data: Dict[str, Any] = {}
         self.time_in_pool: Dict[str, float] = {}
 
-        self.prior_history = ''
+        self.prior_history = []
 
     def get_active_agent(self) -> ChatServiceAgent:
         """

@@ -30,7 +30,7 @@ class ChatServiceAgent(Agent, ABC):
         # initialize stored data
         self.set_stored_data()
 
-        self.prior_history = ''
+        self.prior_history = []
 
     @property
     def data(self):

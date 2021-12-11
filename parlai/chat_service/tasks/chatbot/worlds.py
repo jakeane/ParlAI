@@ -43,10 +43,7 @@ class MessengerBotChatTaskWorld(World):
         self.first_time = True
 
         try:
-            response = requests.get('http://localhost:5001/flutter-chatbot-bbe5a/us-central1/getConversation', params={ 'convoID': agent.prior_history })
-
-            conversation = json.loads(response.text)
-            for exchange in conversation['data']:
+            for exchange in agent.prior_history:
                 if exchange.get('user', ''):
                     self.model.observe({'episode_done': False, 'text': exchange['user']})
 
