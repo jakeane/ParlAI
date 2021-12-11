@@ -41,6 +41,8 @@ class AgentState:
         self.stored_data: Dict[str, Any] = {}
         self.time_in_pool: Dict[str, float] = {}
 
+        self.prior_history = ''
+
     def get_active_agent(self) -> ChatServiceAgent:
         """
         Return active messenger agent.
@@ -422,6 +424,9 @@ class ChatServiceManager(ABC):
             return
 
         agent_state = self.get_agent_state(agent_id)
+        if 'payload' in message:
+            agent_state.prior_history = message['payload']
+
         assert agent_state is not None
         if agent_state.get_active_agent() is None:
             # return agent to overworld
