@@ -52,6 +52,10 @@ class MetricDisplayData(NamedTuple):
 
 METRICS_DISPLAY_DATA = {
     "accuracy": MetricDisplayData("Accuracy", "Exact match text accuracy"),
+    'auc': MetricDisplayData(
+        'AUC',
+        "Area Under the Receiver Operating Characteristic Curve (true positive rate vs false positive rate curve)",
+    ),
     "bleu-4": MetricDisplayData(
         "BLEU-4",
         "BLEU-4 of the generation, under a standardized (model-independent) tokenizer",
@@ -1037,13 +1041,16 @@ class TeacherMetrics(Metrics):
         # Ranking metrics.
         self._update_ranking_metrics(observation, labels)
 
+        self._consume_user_metrics(observation)
+
+    def _consume_user_metrics(self, observation):
         # User-reported metrics
         if 'metrics' in observation:
             for uk, v in observation['metrics'].items():
                 if uk in ALL_METRICS:
                     # don't let the user override our metrics
                     uk = f'USER_{uk}'
-                assert isinstance(uk, str), type(k)
+                assert isinstance(uk, str), f'{type(uk)} is not a str'
                 if not isinstance(v, Metric):
                     warn_once(f'Metric {uk} is assumed to be averaged per example.')
                     v = AverageMetric(v)

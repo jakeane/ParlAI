@@ -133,7 +133,7 @@ class ParlaiLogger(logging.Logger):
 # -----------------------------------
 # Forming the logger                #
 # -----------------------------------
-logger = ParlaiLogger(name=__name__)
+logger = ParlaiLogger(name="parlai")
 
 
 def set_log_level(level):
@@ -181,11 +181,11 @@ def error(*args, **kwargs):
 
 
 def warn(*args, **kwargs):
-    return logger.warn(*args, **kwargs)
+    return logger.warning(*args, **kwargs)
 
 
 def warning(*args, **kwargs):
-    return logger.warn(*args, **kwargs)
+    return logger.warning(*args, **kwargs)
 
 
 def get_all_levels():

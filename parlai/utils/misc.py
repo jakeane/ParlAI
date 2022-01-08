@@ -645,8 +645,9 @@ def str_to_msg(txt, ignore_fields=''):
 
     def tolist(txt):
         vals = txt.split('|')
-        for v in vals:
+        for i, v in enumerate(vals):
             v = tostr(v)
+            vals[i] = v
         return vals
 
     def convert(key, value):
@@ -770,7 +771,7 @@ def warn_once(msg: str) -> None:
     global _seen_logs
     if msg not in _seen_logs:
         _seen_logs.add(msg)
-        logging.warn(msg)
+        logging.warning(msg)
 
 
 def error_once(msg: str) -> None:

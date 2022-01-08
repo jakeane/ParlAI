@@ -92,13 +92,17 @@ class TensorboardLogger(object):
                 logging.error(f'k {k} v {v} is not a number')
                 continue
             display = get_metric_display_data(metric=k)
-            self.writer.add_scalar(
-                f'{k}/{setting}',
-                v,
-                global_step=step,
-                display_name=f"{display.title}",
-                summary_description=display.description,
-            )
+            try:
+                self.writer.add_scalar(
+                    f'{k}/{setting}',
+                    v,
+                    global_step=step,
+                    display_name=f"{display.title}",
+                    summary_description=display.description,
+                )
+            except TypeError:
+                # internal tensorboard doesn't support custom display titles etc
+                self.writer.add_scalar(f'{k}/{setting}', v, global_step=step)
 
     def flush(self):
         self.writer.flush()
@@ -139,6 +143,13 @@ class WandbLogger(object):
             help='W&B project name. Defaults to timestamp. Usually the name of the sweep.',
             hidden=False,
         )
+        logger.add_argument(
+            '--wandb-entity',
+            type=str,
+            default=None,
+            help='W&B entity name.',
+            hidden=False,
+        )
         return logger
 
     def __init__(self, opt: Opt, model=None):
@@ -160,6 +171,7 @@ class WandbLogger(object):
             project=project,
             dir=os.path.dirname(opt['model_file']),
             notes=f"{opt['model_file']}",
+            entity=opt.get('wandb_entity'),
             reinit=True,  # in case of preemption
         )
         # suppress wandb's output

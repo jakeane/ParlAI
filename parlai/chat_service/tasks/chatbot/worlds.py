@@ -6,6 +6,9 @@
 #
 # py parlai/chat_service/tasks/overworld_demo/run.py --debug --verbose
 
+import requests
+import json
+
 from parlai.core.worlds import World
 from parlai.chat_service.services.messenger.worlds import OnboardWorld
 from parlai.core.agents import create_agent_from_shared
@@ -38,6 +41,19 @@ class MessengerBotChatTaskWorld(World):
         self.episodeDone = False
         self.model = bot
         self.first_time = True
+
+        try:
+            for exchange in agent.prior_history:
+                if exchange.get('user', ''):
+                    self.model.observe({'episode_done': False, 'text': exchange['user']})
+
+                if exchange.get('bot', ''):
+                    self.model.self_observe({'text': exchange['bot']})
+                else:
+                    resp = self.model.act()
+                    self.agent.observe(resp)
+        except:
+            pass
 
     @staticmethod
     def generate_world(opt, agents):
