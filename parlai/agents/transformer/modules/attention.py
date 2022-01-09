@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from parlai.core.opt import Opt
 from parlai.utils.torch import neginf
 
 
@@ -92,8 +93,20 @@ class MultiHeadAttention(nn.Module):
     See Vaswani (2017) for an extensive description.
     """
 
-    def __init__(self, n_heads: int, dim: int, dropout: float = 0):
+    def __init__(
+        self, opt: Opt, n_heads: int = None, dim: int = None, dropout: float = 0
+    ):
         super(MultiHeadAttention, self).__init__()
+
+        def _default(val, default):
+            """
+            shorthand for explicit None check for optional arguments.
+            """
+            return val if val is not None else default
+
+        n_heads = _default(n_heads, opt['n_heads'])
+        dim = _default(dim, opt['embedding_size'])
+
         self.n_heads = n_heads
         self.dim = dim
 
@@ -120,6 +133,7 @@ class MultiHeadAttention(nn.Module):
         mask: torch.Tensor = None,
         incr_state: Optional[Dict[str, torch.Tensor]] = None,
         static_kv: bool = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor]:
         """
         Forward pass.
@@ -178,8 +192,6 @@ class MultiHeadAttention(nn.Module):
         _, _key_len, dim = key.size()
 
         q = prepare_head(self.q_lin(query))
-        k = prepare_head(self.k_lin(key))
-        v = prepare_head(self.v_lin(value))
 
         # Prepend incremental states. For each of the key, value, and mask, see if
         # a previous incremental state exists, and if so, reshape it to match the shape
@@ -195,7 +207,9 @@ class MultiHeadAttention(nn.Module):
             if static_kv:
                 k = prev_key
             else:
-                k = torch.cat([prev_key, k], dim=1)
+                k = torch.cat([prev_key, prepare_head(self.k_lin(key))], dim=1)
+        else:
+            k = prepare_head(self.k_lin(key))
         if 'prev_value' in incr_state:
             prev_value = incr_state['prev_value'].view(
                 batch_size * n_heads, -1, dim_per_head
@@ -203,7 +217,9 @@ class MultiHeadAttention(nn.Module):
             if static_kv:
                 v = prev_value
             else:
-                v = torch.cat([prev_value, v], dim=1)
+                v = torch.cat([prev_value, prepare_head(self.v_lin(value))], dim=1)
+        else:
+            v = prepare_head(self.v_lin(value))
         if 'prev_mask' in incr_state:
             if static_kv:
                 mask = incr_state['prev_mask']

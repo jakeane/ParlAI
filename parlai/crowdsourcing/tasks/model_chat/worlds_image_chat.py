@@ -75,10 +75,10 @@ Be sure to talk about this image a little bit before discussing other things!
 
         # Have the bot respond
         bot_first_act_raw = self.bot.act()
-        bot_first_act_raw = Compatibility.maybe_fix_act(bot_first_act_raw)
-        if 'metrics' in bot_first_act_raw:
-            del bot_first_act_raw['metrics']
-            # Metrics can't be saved to JSON and are not needed here
+        bot_first_act_raw = Message(
+            Compatibility.maybe_fix_act(bot_first_act_raw)
+        ).json_safe_payload()
+        bot_first_act_raw['id'] = self.bot.agent_id
         self.agent.observe(validate(bot_first_act_raw))
         bot_first_act = {
             'episode_done': False,
@@ -91,7 +91,7 @@ Be sure to talk about this image a little bit before discussing other things!
         self.dialog.append(image_act)
         self.dialog.append(bot_first_act)
 
-    def _postprocess_acts(self, acts: List[Message], agent_idx: int):
+    def _postprocess_acts(self, acts: List[dict], agent_idx: int):
         """
         Show the bot the image again on every turn.
         """
@@ -100,7 +100,7 @@ Be sure to talk about this image a little bit before discussing other things!
             # image-related fields needed by the model
             for key, value in self.image_act.items():
                 if key not in ['episode_done', 'id', 'text', 'agent_idx']:
-                    acts[agent_idx].force_set(key, value)
+                    acts[agent_idx][key] = value
 
     def get_final_chat_data(self) -> Dict[str, Any]:
         """
@@ -134,8 +134,6 @@ Be sure to talk about this image a little bit before discussing other things!
 
 
 def make_world(opt, agents):
-
-    agents[0].agent_id = "Worker"
 
     # We are showing an image to the worker and bot, so grab the image path and other
     # context info

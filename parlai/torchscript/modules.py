@@ -8,11 +8,11 @@ from collections import defaultdict
 from typing import List, Dict, Optional, Tuple
 
 import torch.jit
-from torch import nn as nn
-
+from parlai.agents.bart.bart import BartAgent
 from parlai.core.dict import DictionaryAgent
 from parlai.core.torch_agent import TorchAgent
 from parlai.utils.bpe import Gpt2BpeHelper
+from torch import nn as nn
 
 
 class TorchScriptGreedySearch(nn.Module):
@@ -30,31 +30,35 @@ class TorchScriptGreedySearch(nn.Module):
         "dict_max_ngram_size": -1,
         "dict_minfreq": 0,
         "dict_maxtokens": -1,
-        "dict_tokenizer": "gpt2",
-        "dict_lower": False,
+        "dict_tokenizer": ["gpt2", "slow_bytelevel_bpe"],
         "dict_textfields": "text,labels",
         "dict_loaded": True,
-        'bpe_debug': False,
+        "bpe_debug": False,
     }
 
     def __init__(self, agent: TorchAgent):
         super().__init__()
 
-        self.is_bart = agent.opt['model'] == 'bart'
-
+        self.is_bart = isinstance(agent, BartAgent)
+        self.device = agent.model.encoder.embeddings.weight.device
         # Dictionary/tokenization setup
         for key, val in self.CAIRAOKE_DICT_PARAMS.items():
-            assert (
-                agent.opt.get(key, val) == val
-            ), f'The only currently supported value of "{key}" is {val}!'
+            if type(val) == list and len(val) > 0:
+                assert (
+                    agent.opt.get(key, val[0]) in val
+                ), f'The only currently supported values of "{key}" are {", ".join(val)}!'
+            else:
+                assert (
+                    agent.opt.get(key, val) == val
+                ), f'The only currently supported value of "{key}" is {val}!'
         orig_dict: DictionaryAgent = agent.dict
         orig_bpe: Gpt2BpeHelper = orig_dict.bpe
         assert all(len(key) == 2 for key in orig_bpe.bpe_ranks.keys())
         assert not any(
-            i for key in orig_bpe.bpe_ranks.keys() for i in key if '\n' in i
+            i for key in orig_bpe.bpe_ranks.keys() for i in key if "\n" in i
         ), "We need to temporarily merge the bpe_ranks dict's keys with a newline character in order to use it as a TorchScript arg, but at least one of the dict's keys contains a newline character already!"
         fused_key_bpe_ranks = {
-            '\n'.join(key): float(val) for key, val in orig_bpe.bpe_ranks.items()
+            "\n".join(key): float(val) for key, val in orig_bpe.bpe_ranks.items()
         }
         # Cast the values as floats to be able to compare to float('inf') when doing BPE
         # splitting
@@ -66,20 +70,21 @@ class TorchScriptGreedySearch(nn.Module):
             freq=orig_dict.freq,
             tok2ind=orig_dict.tok2ind,
             ind2tok=orig_dict.ind2tok,
-            bpe_add_prefix_space=agent.opt['bpe_add_prefix_space'],
+            bpe_add_prefix_space=agent.opt["bpe_add_prefix_space"],
             bpe_encoder=orig_bpe.encoder,
             bpe_byte_encoder=orig_bpe.byte_encoder,
             fused_key_bpe_ranks=fused_key_bpe_ranks,
+            special_tokens=agent._get_special_tokens(),
         )
 
         # History tracking and start/end tokens
         self.delimiter_tok = agent.history.delimiter_tok
-        self.history_size = agent.opt['history_size']
-        if agent.opt.get('history_add_global_end_token', None) is not None:
+        self.history_size = agent.opt["history_size"]
+        if agent.opt.get("history_add_global_end_token", None) is not None:
             self.global_end_token = agent.dict[agent.dict.end_token]
         else:
             self.global_end_token = None
-        self.text_truncate = agent.opt.get('text_truncate') or agent.opt['truncate']
+        self.text_truncate = agent.opt.get("text_truncate") or agent.opt["truncate"]
         self.text_truncate = self.text_truncate if self.text_truncate >= 0 else None
 
         self.start_idx = agent.model.START_IDX
@@ -98,7 +103,10 @@ class TorchScriptGreedySearch(nn.Module):
         wrapped_model = ModelIncrStateFlattener(agent.model)
 
         # Create sample inputs for tracing
-        sample_tokens = torch.tensor([[1, 2, 3, 4, 5]], dtype=torch.long)
+        sample_tokens = torch.tensor(
+            [[1, 2, 3, 4, 5]], dtype=torch.long, device=self.device
+        )
+        sample_tokens = sample_tokens.to(self.device)
         encoder_states = agent.model.encoder(sample_tokens)
         initial_generations = self._get_initial_decoder_input(sample_tokens)
         latent, initial_incr_state = wrapped_decoder(
@@ -125,8 +133,8 @@ class TorchScriptGreedySearch(nn.Module):
         self.partially_traced_model = torch.jit.trace_module(
             wrapped_model,
             {
-                'output': (latent[:, -1:, :]),
-                'reorder_decoder_incremental_state': (
+                "output": (latent[:, -1:, :]),
+                "reorder_decoder_incremental_state": (
                     initial_incr_state,
                     torch.tensor([0], dtype=torch.long, device=sample_tokens.device),
                 ),
@@ -136,6 +144,9 @@ class TorchScriptGreedySearch(nn.Module):
         self.decoder_later_pass = torch.jit.trace(
             wrapped_decoder, (generations, encoder_states, incr_state), strict=False
         )
+
+    def get_device(self):
+        return self.encoder.embeddings.weight.device
 
     def _get_initial_decoder_input(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -147,7 +158,9 @@ class TorchScriptGreedySearch(nn.Module):
         """
         bsz = x.size(0)
         return (
-            torch.tensor(self.initial_decoder_input, dtype=torch.long)
+            torch.tensor(
+                self.initial_decoder_input, dtype=torch.long, device=self.device
+            )
             .expand(bsz, len(self.initial_decoder_input))
             .to(x.device)
         )
@@ -171,7 +184,8 @@ class TorchScriptGreedySearch(nn.Module):
 
         # Vectorize all lines of context
         history_vecs: List[List[int]] = []
-        context_lines = context.split('\n')
+        context_lines = context.split("\n")
+        context_lines = self.preprocess_context(context_lines)
         if self.history_size > 0:
             context_lines = context_lines[-self.history_size :]
         for line in context_lines:
@@ -212,6 +226,8 @@ class TorchScriptGreedySearch(nn.Module):
             )
 
         # Pass through the encoder and decoder to generate tokens
+
+        flattened_text_vec = flattened_text_vec.to(self.get_device())
         batch_text_vec = torch.unsqueeze(flattened_text_vec, dim=0)  # Add batch dim
         encoder_states = self.encoder(batch_text_vec)
         generations = self._get_initial_decoder_input(batch_text_vec)
@@ -249,7 +265,18 @@ class TorchScriptGreedySearch(nn.Module):
         generation_tokens: List[int] = generations[0].tolist()
         label = self._v2t(generation_tokens)
 
+        return self.postprocess_output_generations(label=label)
+
+    def postprocess_output_generations(self, label: str) -> str:
+        """
+        Post-process the model output.
+
+        Returns the model output by default, override to add custom logic
+        """
         return label
+
+    def preprocess_context(self, context_lines: List[str]) -> List[str]:
+        return context_lines
 
 
 class BaseIncrStateFlattener(nn.Module):
@@ -285,7 +312,7 @@ class BaseIncrStateFlattener(nn.Module):
         """
         structured_incr_state = defaultdict(lambda: defaultdict(dict))
         for key, state in flat_incr_state.items():
-            layer_idx_str, attn_type, state_type = key.split('__')
+            layer_idx_str, attn_type, state_type = key.split("__")
             structured_incr_state[int(layer_idx_str)][attn_type][state_type] = state
         return dict({k: dict(v) for k, v in structured_incr_state.items()})
         # Turn the nested defaultdicts back into regular dicts
@@ -303,7 +330,7 @@ class BaseIncrStateFlattener(nn.Module):
         for layer_idx, dict1 in structured_incr_state.items():
             for attn_type, dict2 in dict1.items():
                 for state_type, state in dict2.items():
-                    key = f'{layer_idx:d}__{attn_type}__{state_type}'
+                    key = f"{layer_idx:d}__{attn_type}__{state_type}"
                     flat_incr_state[key] = state
         return flat_incr_state
 
@@ -366,7 +393,7 @@ class ScriptableGpt2BpeHelper(object):
         """
         Split tokens in a manner that replicates parlai.utils.bpe.Gpt2BpeHelper.
         """
-        contraction_endings = ['s', 't', 're', 've', 'm', 'll', 'd']
+        contraction_endings = ["s", "t", "re", "ve", "m", "ll", "d"]
 
         tokens: List[str] = []
         idx = 0
@@ -374,7 +401,7 @@ class ScriptableGpt2BpeHelper(object):
         while idx < len(text):
             num_passes += 1
             if num_passes > 10000:
-                return ['*** Infinite loop in ScriptableGpt2BpeHelper.findall()! ***']
+                return ["*** Infinite loop in ScriptableGpt2BpeHelper.findall()! ***"]
             if text[idx] == "'":
                 # Capture contradiction suffixes
                 captured_suffix = False
@@ -387,10 +414,10 @@ class ScriptableGpt2BpeHelper(object):
                 if captured_suffix:
                     continue
             if not text[idx].isspace() or (
-                text[idx] == ' ' and idx + 1 < len(text) and not text[idx + 1].isspace()
+                text[idx] == " " and idx + 1 < len(text) and not text[idx + 1].isspace()
             ):
                 # Capture runs of one type of character
-                if text[idx] == ' ':
+                if text[idx] == " ":
                     last_matching_idx = idx + 1
                 else:
                     last_matching_idx = idx
@@ -451,6 +478,7 @@ class ScriptableGpt2BpeHelper(object):
         encoder: Dict[str, str],
         byte_encoder: Dict[int, str],
         fused_key_bpe_ranks: Dict[str, float],
+        special_tokens: List[str],
     ):
 
         self.add_prefix_space = add_prefix_space
@@ -467,6 +495,11 @@ class ScriptableGpt2BpeHelper(object):
 
         self.bpe_ranks = fused_key_bpe_ranks
 
+        # special tokens
+        self._special_tokens: Dict[str, int] = {}
+        for st in special_tokens:
+            self._special_tokens[st] = 1
+
     def encode(self, text: str) -> List[str]:
         """
         Tokenize text.
@@ -480,8 +513,42 @@ class ScriptableGpt2BpeHelper(object):
             A list of tokens
         """
         if self.add_prefix_space:
-            text = f' {text}'
-        return self.helper_encode(text)
+            text = f" {text}"
+
+        # constants for readability
+        FINAL = 1
+        SPLITABLE = 0
+        pieces: List[Tuple[str, int]] = [(text, SPLITABLE)]
+
+        for special_token in self._special_tokens.keys():
+            i = 0
+            while i < len(pieces):
+                subtext, status = pieces[i]
+                if status == FINAL:
+                    i += 1
+                    continue
+                split = subtext.split(special_token)
+                if len(split) > 1:
+                    # special token detected, replace the chunk with small subchunks
+                    # split by the special token
+                    pieces.pop(i)
+                    for j, piece in enumerate(split):
+                        if j > 0:
+                            # add the special token as a delimiter
+                            pieces.insert(i + j, (special_token, FINAL))
+                        pieces.insert(i + j + int(j > 0), (piece, SPLITABLE))
+                else:
+                    i += 1
+
+        output: List[str] = []
+        for piece, state in pieces:
+            if state is FINAL:
+                output.append(piece)
+            else:
+                output += self.helper_encode(piece)
+        text = "".join(output)
+
+        return output
 
     def get_pairs(self, word: List[str]) -> List[Tuple[str, str]]:
         """
@@ -518,14 +585,14 @@ class ScriptableGpt2BpeHelper(object):
             return word
 
         while True:
-            min_rank = self.bpe_ranks.get('\n'.join(pairs[0]), float('inf'))
+            min_rank = self.bpe_ranks.get("\n".join(pairs[0]), float("inf"))
             bigram = pairs[0]
             for pair in pairs[1:]:
-                current_rank = self.bpe_ranks.get('\n'.join(pair), float('inf'))
+                current_rank = self.bpe_ranks.get("\n".join(pair), float("inf"))
                 if current_rank < min_rank:
                     min_rank = current_rank
                     bigram = pair
-            if '\n'.join(bigram) not in self.bpe_ranks:
+            if "\n".join(bigram) not in self.bpe_ranks:
                 break
             first, second = bigram
             new_word: List[str] = []
@@ -586,10 +653,23 @@ class ScriptableGpt2BpeHelper(object):
         :return text:
             decoded text
         """
-        text = self.helper_decode(tokens)
+        output: List[str] = []
+        accum: List[str] = []
+        for token in tokens:
+            if token in self._special_tokens:
+                if len(accum) > 0:
+                    output.append(self.helper_decode(accum))
+                    accum.clear()
+                output.append(token)
+            else:
+                accum.append(token)
+        if len(accum) > 0:
+            output.append(self.helper_decode(accum))
+
+        text = "".join(output)
         if self.add_prefix_space:
-            assert text.startswith(' ')
-            text = text.lstrip(' ')
+            assert text.startswith(" ")
+            text = text.lstrip(" ")
         return text
 
     def helper_decode(self, tokens: List[str]) -> str:
@@ -618,7 +698,7 @@ class ScriptableGpt2BpeHelper(object):
         decoded_chars: List[str] = []
         for char in chars:
             decoded_chars.append(chr(self.byte_decoder[char]))
-        return ''.join(decoded_chars)
+        return "".join(decoded_chars)
 
     def utf8_chars(self, s: str) -> List[str]:
         """
@@ -687,6 +767,7 @@ class ScriptableDictionaryAgent:
         bpe_encoder: Dict[str, str],
         bpe_byte_encoder: Dict[int, str],
         fused_key_bpe_ranks: Dict[str, float],
+        special_tokens: List[str],
     ):
 
         self.null_token = null_token
@@ -707,6 +788,7 @@ class ScriptableDictionaryAgent:
             encoder=bpe_encoder,
             byte_encoder=bpe_byte_encoder,
             fused_key_bpe_ranks=fused_key_bpe_ranks,
+            special_tokens=special_tokens,
         )
 
     def _word_lookup(self, key: str) -> int:

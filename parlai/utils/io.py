@@ -11,8 +11,8 @@ except ImportError:
         from fvcore.common.file_io import PathManagerBase as _PathManager
     except ImportError:
         raise ImportError(
-            "parlai now requires fvcore for some I/O operations. Please run "
-            "`pip install fvcore==0.1.1.post20200716`"
+            "parlai now requires iopath for some I/O operations. Please run "
+            "`pip install iopath`"
         )
 
 USE_ATOMIC_TORCH_SAVE = True
@@ -23,8 +23,7 @@ try:
     # register any internal file handlers
     import parlai_fb  # noqa: F401
 
-    parlai_fb.finalize_registration(PathManager)
     # internal file handlers can't handle atomic saving. see T71772714
-    USE_ATOMIC_TORCH_SAVE = False
+    USE_ATOMIC_TORCH_SAVE = not parlai_fb.finalize_registration(PathManager)
 except ModuleNotFoundError:
-    pass
+    USE_ATOMIC_TORCH_SAVE = True

@@ -762,6 +762,38 @@ class TestTorchAgent(unittest.TestCase):
             == 'your persona: filler\nhello i am stephen\ni am bob'
         )
 
+    def test_temp_history_observe(self):
+        """
+        Test temp_history when provided via a field in the observation.
+        """
+        agent = get_agent(dict_file='zoo:unittest/transformer_generator2/model.dict')
+        obs = agent.observe(
+            {'text': '1 2 3', 'temp_history': '4 5 6', 'episode_done': False}
+        )
+        assert len(obs['text_vec']) == 6
+        assert obs['full_text'] == '1 2 34 5 6'
+        obs = agent.observe(
+            {'text': '1 2 3', 'temp_history': '6', 'episode_done': False}
+        )
+        assert len(obs['text_vec']) == 7
+        assert obs['full_text'] == '1 2 3\n1 2 36'
+        obs = agent.observe({'text': '1 2 3', 'episode_done': False})
+        assert len(obs['text_vec']) == 9
+        assert obs['full_text'] == '1 2 3\n1 2 3\n1 2 3'
+
+        # make sure temp history is forgotten after a reset
+        obs = agent.observe(
+            {'text': '1 2 3', 'temp_history': '4', 'episode_done': True}
+        )
+        assert len(obs['text_vec']) == 13
+        assert obs['full_text'] == '1 2 3\n1 2 3\n1 2 3\n1 2 34'
+        agent.act()  # get that self-observe in
+
+        obs = agent.observe({'text': '1 2 3', 'episode_done': True})
+        assert len(obs['text_vec']) == 3
+        assert obs['full_text'] == '1 2 3'
+        agent.act()  # get that self-observe in
+
     def test_observe(self):
         """
         Make sure agent stores and returns observation.
@@ -863,6 +895,92 @@ class TestTorchAgent(unittest.TestCase):
         reply = agent.batch_act(obs_elabs_vecs)
         for i in range(len(obs_elabs_vecs)):
             self.assertIn('Evaluating {}'.format(i), reply[i]['text'])
+
+    def test_respond(self):
+        """
+        Tests respond() in the base Agent class, where the agent provides
+        a string response to a single message.
+        """
+        agent = get_agent()
+        message = Message(
+            {
+                'text': "It's only a flesh wound.",
+                'labels': ['Yield!'],
+                'episode_done': True,
+            }
+        )
+        response = agent.respond(message)
+        self.assertEqual(response, 'Training 0!')
+        message = Message(
+            {
+                'text': "It's only a flesh wound.",
+                'eval_labels': ['Yield!'],
+                'episode_done': True,
+            }
+        )
+        response = agent.respond(message)
+        self.assertIn('Evaluating 0', response)
+
+    def test_batch_respond(self):
+        """
+        Tests batch_respond() in the base Agent class, where the agent provides
+        a batch response to a batch of messages.
+        """
+        agent = get_agent()
+
+        obs_labs = [
+            Message(
+                {
+                    'text': "It's only a flesh wound.",
+                    'labels': ['Yield!'],
+                    'episode_done': True,
+                }
+            ),
+            Message(
+                {
+                    'text': 'The needs of the many outweigh...',
+                    'labels': ['The needs of the few.'],
+                    'episode_done': True,
+                }
+            ),
+            Message(
+                {
+                    'text': 'Hello there.',
+                    'labels': ['General Kenobi.'],
+                    'episode_done': True,
+                }
+            ),
+        ]
+        response = agent.batch_respond(obs_labs)
+        for i, resp in enumerate(response):
+            self.assertEqual(resp, 'Training {}!'.format(i))
+
+        obs_elabs = [
+            Message(
+                {
+                    'text': "It's only a flesh wound.",
+                    'eval_labels': ['Yield!'],
+                    'episode_done': True,
+                }
+            ),
+            Message(
+                {
+                    'text': 'The needs of the many outweigh...',
+                    'eval_labels': ['The needs of the few.'],
+                    'episode_done': True,
+                }
+            ),
+            Message(
+                {
+                    'text': 'Hello there.',
+                    'eval_labels': ['General Kenobi.'],
+                    'episode_done': True,
+                }
+            ),
+        ]
+        response = agent.batch_respond(obs_elabs)
+        for i, resp in enumerate(response):
+            self.assertIn('Evaluating {}'.format(i), resp)
 
     def test_interactive_mode(self):
         """

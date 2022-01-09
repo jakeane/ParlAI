@@ -242,7 +242,7 @@ class Conversations:
         if self.metadata is not None:
             logging.info(self.metadata)
         else:
-            logging.warn('No metadata available.')
+            logging.warning('No metadata available.')
 
     def __getitem__(self, index):
         return self.conversations[index]
@@ -276,6 +276,14 @@ class Conversations:
         fle, _ = os.path.splitext(datapath)
         return fle + '.jsonl'
 
+    @staticmethod
+    def _check_parent_dir_exits(datapath):
+        parent_dir = os.path.dirname(datapath)
+        if not parent_dir or PathManager.exists(parent_dir):
+            return
+        logging.info(f'Parent directory ({parent_dir}) did not exist and was created.')
+        PathManager.mkdirs(parent_dir)
+
     @classmethod
     def save_conversations(
         cls,
@@ -294,9 +302,10 @@ class Conversations:
         each of which is comprised of a list of act pairs (i.e. a list dictionaries
         returned from one parley)
         """
+        cls._check_parent_dir_exits(datapath)
         to_save = cls._get_path(datapath)
 
-        context_ids = context_ids.split(',')
+        context_ids = context_ids.strip().split(',')
         # save conversations
         speakers = []
         with PathManager.open(to_save, 'w') as f:
@@ -336,7 +345,7 @@ class Conversations:
                             convo['context'].append(turn)
                     if new_pair:
                         convo['dialog'].append(new_pair)
-                json_convo = json.dumps(convo)
+                json_convo = json.dumps(convo, default=lambda v: '<not serializable>')
                 f.write(json_convo + '\n')
         logging.info(f'Conversations saved to file: {to_save}')
 

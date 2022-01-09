@@ -38,31 +38,91 @@ class TestTorchScript(unittest.TestCase):
         tasks = ['taskmaster2', 'convai2']
         compiled_pattern = regex.compile(Gpt2BpeHelper.PATTERN)
 
-        with testing_utils.tempdir() as tmpdir:
-            datapath = tmpdir
+        for task in tasks:
+            opt = TorchScript.setup_args().parse_kwargs(
+                task=task, datatype='train:ordered'
+            )
+            agent = RepeatLabelAgent(opt)
+            # TODO(roller): make a proper create_teacher helper
+            teacher = create_task(opt, agent).get_task_agent()
+            num_examples = teacher.num_examples()
 
-            for task in tasks:
-                opt = TorchScript.setup_args().parse_kwargs(
-                    task=task, datatype='train:ordered', datapath=datapath
-                )
-                agent = RepeatLabelAgent(opt)
-                # TODO(roller): make a proper create_teacher helper
-                teacher = create_task(opt, agent).get_task_agent()
-                num_examples = teacher.num_examples()
+            print(
+                f'\nStarting to test {num_examples:d} examples for the ' f'{task} task.'
+            )
+            for idx, message in enumerate(teacher):
+                if idx % 10000 == 0:
+                    print(f'Testing example #{idx:d}.')
+                text = message['text']
+                canonical_tokens = regex.findall(compiled_pattern, text)
+                scriptable_tokens = ScriptableGpt2BpeHelper.findall(text)
+                self.assertEqual(canonical_tokens, scriptable_tokens)
+                if idx + 1 == num_examples:
+                    break
 
-                print(
-                    f'\nStarting to test {num_examples:d} examples for the '
-                    f'{task} task.'
-                )
-                for idx, message in enumerate(teacher):
-                    if idx % 10000 == 0:
-                        print(f'Testing example #{idx:d}.')
-                    text = message['text']
-                    canonical_tokens = regex.findall(compiled_pattern, text)
-                    scriptable_tokens = ScriptableGpt2BpeHelper.findall(text)
-                    self.assertEqual(canonical_tokens, scriptable_tokens)
-                    if idx + 1 == num_examples:
-                        break
+    def test_special_tokenization(self):
+        from parlai.core.dict import DictionaryAgent
+        from parlai.core.params import ParlaiParser
+        from parlai.torchscript.modules import ScriptableDictionaryAgent
+
+        SPECIAL = ['Q00', 'Q01']
+        text = "Don't have a Q00, man! Have a Q01 instead."
+
+        parser = ParlaiParser(False, False)
+        DictionaryAgent.add_cmdline_args(parser)
+        with testing_utils.tempdir() as tmp:
+            opt = parser.parse_kwargs(
+                dict_tokenizer='gpt2', dict_file=os.path.join(tmp, 'dict')
+            )
+
+            orig_dict = DictionaryAgent(opt)
+
+            orig_bpe = orig_dict.bpe
+            fused_key_bpe_ranks = {
+                '\n'.join(key): float(val) for key, val in orig_bpe.bpe_ranks.items()
+            }
+
+            sda = ScriptableDictionaryAgent(
+                null_token=orig_dict.null_token,
+                end_token=orig_dict.end_token,
+                unk_token=orig_dict.unk_token,
+                start_token=orig_dict.start_token,
+                freq=orig_dict.freq,
+                tok2ind=orig_dict.tok2ind,
+                ind2tok=orig_dict.ind2tok,
+                bpe_add_prefix_space=False,
+                bpe_encoder=orig_bpe.encoder,
+                bpe_byte_encoder=orig_bpe.byte_encoder,
+                fused_key_bpe_ranks=fused_key_bpe_ranks,
+                special_tokens=[],
+            )
+
+            tokenized = sda.txt2vec(text)
+            assert len(tokenized) == 15
+            assert sda.vec2txt(tokenized) == text
+
+            orig_dict = DictionaryAgent(opt)
+            orig_dict.add_additional_special_tokens(SPECIAL)
+            orig_bpe = orig_dict.bpe
+            sda = ScriptableDictionaryAgent(
+                null_token=orig_dict.null_token,
+                end_token=orig_dict.end_token,
+                unk_token=orig_dict.unk_token,
+                start_token=orig_dict.start_token,
+                freq=orig_dict.freq,
+                tok2ind=orig_dict.tok2ind,
+                ind2tok=orig_dict.ind2tok,
+                bpe_add_prefix_space=False,
+                bpe_encoder=orig_bpe.encoder,
+                bpe_byte_encoder=orig_bpe.byte_encoder,
+                fused_key_bpe_ranks=fused_key_bpe_ranks,
+                special_tokens=SPECIAL,
+            )
+
+            special_tokenized = sda.txt2vec(text)
+            assert len(special_tokenized) == 15
+            assert sda.vec2txt(special_tokenized) == text
+            assert special_tokenized != tokenized
 
     def test_torchscript_agent(self):
         """
@@ -79,11 +139,41 @@ class TestTorchScript(unittest.TestCase):
 
             # Export the BART model
             export_opt = TorchScript.setup_args().parse_kwargs(
-                model='bart', scripted_model_file=scripted_model_file
+                model='bart', scripted_model_file=scripted_model_file, no_cuda=True
             )
             TorchScript(export_opt).run()
 
             # Test the scripted BART model
+            scripted_opt = ParlaiParser(True, True).parse_kwargs(
+                model='parlai.torchscript.agents:TorchScriptAgent',
+                model_file=scripted_model_file,
+            )
+            bart = create_agent(scripted_opt)
+            bart.observe({'text': test_phrase, 'episode_done': True})
+            act = bart.act()
+            self.assertEqual(act['text'], test_phrase)
+
+    def test_gpu_torchscript_agent(self):
+        """
+        Test exporting a model to TorchScript for GPU and then testing it on sample
+        data.
+        """
+
+        from parlai.scripts.torchscript import TorchScript
+
+        test_phrase = "Don't have a cow, man!"  # From test_bart.py
+
+        with testing_utils.tempdir() as tmpdir:
+
+            scripted_model_file = os.path.join(tmpdir, 'scripted_model.pt')
+
+            # Export the BART model for GPU
+            export_opt = TorchScript.setup_args().parse_kwargs(
+                model='bart', scripted_model_file=scripted_model_file, no_cuda=False
+            )
+            TorchScript(export_opt).run()
+
+            # Test the scripted GPU BART model
             scripted_opt = ParlaiParser(True, True).parse_kwargs(
                 model='parlai.torchscript.agents:TorchScriptAgent',
                 model_file=scripted_model_file,

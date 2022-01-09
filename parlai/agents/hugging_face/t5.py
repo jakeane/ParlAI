@@ -29,8 +29,16 @@ from parlai.core.torch_agent import Batch, TorchAgent
 from parlai.core.torch_generator_agent import TorchGeneratorAgent, TorchGeneratorModel
 
 
+def check_hf_version(v: Tuple[int, int]) -> bool:
+    """
+    Check that HF version is greater than 4.3.
+    """
+    main, sub = v
+    return main > 4 or (main == 4 and sub >= 3)
+
+
 def build_t5(opt: Opt) -> T5ForConditionalGeneration:
-    if not HF_VERSION >= 4.3:
+    if not check_hf_version(HF_VERSION):
         raise RuntimeError('Must use transformers package >= 4.3 to use t5')
     return T5ForConditionalGeneration.from_pretrained(
         opt['t5_model_arch'], dropout_rate=opt['t5_dropout']
@@ -187,7 +195,7 @@ class T5Agent(TorchGeneratorAgent):
             generation_params.update(overrides)
 
         outputs = self.model.t5.generate(**generation_params)
-        outputs = [(outputs[i], 0) for i in range(outputs.size(0))]
+        outputs = [(outputs[i], 0, None) for i in range(outputs.size(0))]
         return outputs, []
 
 
@@ -197,10 +205,10 @@ class T5Agent(TorchGeneratorAgent):
 
 
 class ParlaiT5Encoder(torch.nn.Module):
-    def __init__(self, opt: Opt, encoder: T5Stack, dictionary: T5DictionaryAgent):
+    def __init__(self, opt: Opt, encoder: T5Stack, padding_idx: Optional[int] = None):
         super().__init__()
         self.stack = encoder
-        self.padding_idx = dictionary[dictionary.null_token]
+        self.padding_idx = padding_idx
         self.paralleled = not opt[
             't5_model_parallel'
         ]  # need to parallel in forward; bug in HF
@@ -233,10 +241,10 @@ class ParlaiT5Encoder(torch.nn.Module):
 
 
 class ParlaiT5Decoder(torch.nn.Module):
-    def __init__(self, opt: Opt, decoder: T5Stack, dictionary: T5DictionaryAgent):
+    def __init__(self, opt: Opt, decoder: T5Stack, padding_idx: Optional[int] = None):
         super().__init__()
         self.stack = decoder
-        self.padding_idx = dictionary[dictionary.null_token]
+        self.padding_idx = padding_idx
         self.paralleled = not opt[
             't5_model_parallel'
         ]  # need to parallel in forward; bug in HF
@@ -283,8 +291,8 @@ class ParlaiT5Model(TorchGeneratorModel):
         self.end_idx = dictionary[dictionary.end_token]
         super().__init__(self.pad_idx, self.start_idx, self.end_idx)
         self.t5 = build_t5(opt)
-        self.encoder = ParlaiT5Encoder(opt, self.t5.get_encoder(), dictionary)
-        self.decoder = ParlaiT5Decoder(opt, self.t5.get_decoder(), dictionary)
+        self.encoder = ParlaiT5Encoder(opt, self.t5.get_encoder(), self.pad_idx)
+        self.decoder = ParlaiT5Decoder(opt, self.t5.get_decoder(), self.pad_idx)
 
     @set_device
     def _get_initial_forced_decoder_input(self, bsz: int, inputs: torch.LongTensor):

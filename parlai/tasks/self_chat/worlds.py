@@ -15,7 +15,11 @@ from parlai.core.message import Message
 
 
 def load_openers(opt) -> Optional[List[str]]:
-    base_task = opt['task'].split(':')[0]
+    if opt['task'].startswith('internal:') or opt['task'].startswith('fb:'):
+        base_task = opt['task']
+    else:
+        base_task = opt['task'].split(':')[0]
+
     if base_task == 'self_chat':
         # TODO(#2284): Load default openers from s3
         return None
@@ -36,18 +40,28 @@ def load_openers(opt) -> Optional[List[str]]:
     task_world = create_task(task_opt, task_agent)
 
     # run through task data, collecting all first messages
-    openers = set()
+    openers = []
     is_first_turn = True
     while not task_world.epoch_done():
         task_world.parley()
         msg = task_world.get_acts()[0]
         # add only the first message in the episode
         if is_first_turn and msg.get('text'):
-            openers.add(msg['text'])
+            openers.append(msg['text'])
         is_first_turn = msg.get('episode_done', False)
 
+    # remove duplicates while preserving the ordering of the loaded openers
+    openers = list(dict.fromkeys(openers))
+
     print(f'[ loaded {len(openers)} openers ]')
-    return list(openers)
+    return openers
+
+
+def load_openers_from_file(filepath: str) -> List[str]:
+    openers = []
+    with open(filepath, 'r') as f:
+        openers = [l.strip() for l in f]
+    return openers
 
 
 class SelfChatWorld(DialogPartnerWorld):
@@ -81,6 +95,8 @@ class SelfChatWorld(DialogPartnerWorld):
         """
         if self.opt.get('seed_messages_from_task'):
             self._openers = load_openers(self.opt)
+        elif self.opt.get('seed_messages_from_file'):
+            self._openers = load_openers_from_file(self.opt['seed_messages_from_file'])
 
     def get_openers(self, episode_num: int) -> Optional[List[str]]:
         """
@@ -106,32 +122,33 @@ class SelfChatWorld(DialogPartnerWorld):
     def _get_seed_utt_acts(
         self, episode_num: int, agents: List[Agent]
     ) -> List[Dict[str, Any]]:
+        """
+        Return acts of any utterances to "seed" the conversation with.
+        """
+
         def make_agent_action(utterance: str, agent: Agent) -> Dict[str, Any]:
             return {'text': utterance, 'episode_done': False, 'id': agent.id}
 
-        openers = self.get_openers(episode_num)
-        if not openers:
-            return []
-        return list(map(make_agent_action, openers, agents))
+        if self.turn_cnt == 0:
+            # Create the seed utterances from any openers
+            openers = self.get_openers(episode_num)
+            if not openers:
+                return []
+            return list(map(make_agent_action, openers, agents))
+        else:
+            # Just return the existing seed utterances, if any exist
+            return self.seed_utterances
 
     def parley(self):
         if self.episode_done():
-            self.turn_cnt = 0
-            self.episode_cnt += 1
-            self.contexts = None
-            self.seed_utterances = None
-            agents = self.get_agents()
-            for a in agents:
-                a.reset()
+            self._end_episode()
 
         if self.turn_cnt == 0:
             self.acts = [None, None]
-            # get the beginning of the conversation, which can include contexts
-            # and/or any number of starting messages
+            # get any context for the beginning of the conversation
             self.contexts = self.get_contexts()
-            self.seed_utterances = self._get_seed_utt_acts(
-                self.episode_cnt, self.agents
-            )
+
+        self.seed_utterances = self._get_seed_utt_acts(self.episode_cnt, self.agents)
 
         if self.contexts:
             assert len(self.contexts) == 2
@@ -170,3 +187,13 @@ class SelfChatWorld(DialogPartnerWorld):
 
         self.update_counters()
         self.turn_cnt += 1
+
+    def _end_episode(self):
+        """
+        Apply logic to end the episode.
+        """
+        self.turn_cnt = 0
+        self.episode_cnt += 1
+        self.contexts = None
+        self.seed_utterances = None
+        self.reset_agents()

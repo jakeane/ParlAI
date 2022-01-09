@@ -25,6 +25,8 @@ import parlai.utils.logging as logging
 import json
 import time
 
+from parlai.agents.local_human.local_human import LocalHumanAgent
+
 HOST_NAME = 'localhost'
 PORT = 8080
 
@@ -195,11 +197,10 @@ class MyHandler(BaseHTTPRequestHandler):
             model_response = self._interactive_running(
                 SHARED.get('opt'), body.decode('utf-8')
             )
-
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            json_str = json.dumps(model_response)
+            json_str = json.dumps(model_response.json_safe_payload())
             self.wfile.write(bytes(json_str, 'utf-8'))
         elif self.path == '/reset':
             self.send_response(200)
@@ -267,14 +268,14 @@ def wait():
 def interactive_web(opt):
     global SHARED
 
-    opt['task'] = 'parlai.agents.local_human.local_human:LocalHumanAgent'
+    human_agent = LocalHumanAgent(opt)
 
     # Create model and assign it to the specified task
     agent = create_agent(opt, requireModelExists=True)
     agent.opt.log()
     SHARED['opt'] = agent.opt
     SHARED['agent'] = agent
-    SHARED['world'] = create_task(SHARED.get('opt'), SHARED['agent'])
+    SHARED['world'] = create_task(SHARED.get('opt'), [human_agent, SHARED['agent']])
 
     MyHandler.protocol_version = 'HTTP/1.0'
     httpd = HTTPServer((opt['host'], opt['port']), MyHandler)

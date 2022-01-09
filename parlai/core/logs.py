@@ -15,6 +15,7 @@ extended to any other tool like visdom.
 """
 
 import os
+import re
 from typing import Optional
 from parlai.core.params import ParlaiParser
 import json
@@ -24,6 +25,9 @@ from parlai.core.opt import Opt
 from parlai.core.metrics import Metric, dict_report, get_metric_display_data
 from parlai.utils.io import PathManager
 import parlai.utils.logging as logging
+
+
+_TB_SUMMARY_INVALID_TAG_CHARACTERS = re.compile(r'[^-/\w\.]')
 
 
 class TensorboardLogger(object):
@@ -92,13 +96,20 @@ class TensorboardLogger(object):
                 logging.error(f'k {k} v {v} is not a number')
                 continue
             display = get_metric_display_data(metric=k)
-            self.writer.add_scalar(
-                f'{k}/{setting}',
-                v,
-                global_step=step,
-                display_name=f"{display.title}",
-                summary_description=display.description,
-            )
+            # Remove invalid characters for TensborboardX Summary beforehand
+            # so that the logs aren't cluttered with warnings.
+            tag = _TB_SUMMARY_INVALID_TAG_CHARACTERS.sub('_', f'{k}/{setting}')
+            try:
+                self.writer.add_scalar(
+                    tag,
+                    v,
+                    global_step=step,
+                    display_name=f"{display.title}",
+                    summary_description=display.description,
+                )
+            except TypeError:
+                # internal tensorboard doesn't support custom display titles etc
+                self.writer.add_scalar(tag, v, global_step=step)
 
     def flush(self):
         self.writer.flush()
@@ -139,6 +150,13 @@ class WandbLogger(object):
             help='W&B project name. Defaults to timestamp. Usually the name of the sweep.',
             hidden=False,
         )
+        logger.add_argument(
+            '--wandb-entity',
+            type=str,
+            default=None,
+            help='W&B entity name.',
+            hidden=False,
+        )
         return logger
 
     def __init__(self, opt: Opt, model=None):
@@ -160,13 +178,17 @@ class WandbLogger(object):
             project=project,
             dir=os.path.dirname(opt['model_file']),
             notes=f"{opt['model_file']}",
+            entity=opt.get('wandb_entity'),
             reinit=True,  # in case of preemption
+            resume=True,  # requeued runs should be treated as single run
         )
         # suppress wandb's output
         logging.getLogger("wandb").setLevel(logging.ERROR)
-        for key, value in opt.items():
-            if value is None or isinstance(value, (str, numbers.Number, tuple)):
-                setattr(self.run.config, key, value)
+
+        if not self.run.resumed:
+            for key, value in opt.items():
+                if value is None or isinstance(value, (str, numbers.Number, tuple)):
+                    setattr(self.run.config, key, value)
         if model is not None:
             self.run.watch(model)
 

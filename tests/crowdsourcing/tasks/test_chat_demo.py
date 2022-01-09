@@ -10,6 +10,8 @@ End-to-end testing for the chat demo crowdsourcing task.
 import os
 import unittest
 
+import parlai.utils.testing as testing_utils
+
 
 # Desired inputs/outputs
 EXPECTED_STATE_AGENT_0 = {
@@ -345,7 +347,6 @@ try:
     import mephisto
     from mephisto.abstractions.blueprints.parlai_chat.parlai_chat_blueprint import (
         SharedParlAITaskState,
-        BLUEPRINT_TYPE,
     )
 
     from parlai.crowdsourcing.utils.tests import AbstractParlAIChatTest
@@ -372,26 +373,21 @@ try:
         def tearDown(self) -> None:
             self._teardown()
 
+        @testing_utils.retry(ntries=3)
         def test_base_task(self):
 
             # # Setup
 
             # Set up the config and database
             overrides = [
-                '+mephisto.blueprint.world_file=${task_dir}/demo_worlds.py',
-                '+mephisto.blueprint.task_description_file=${task_dir}/task_description.html',
-                '+mephisto.blueprint.num_conversations=1',
-                '+mephisto.task.allowed_concurrent=0',
-                '+num_turns=3',
-                '+turn_timeout=300',
+                '++mephisto.task.allowed_concurrent=0',
+                '++mephisto.task.assignment_duration_in_seconds=600',
+                '++mephisto.task.max_num_concurrent_units=0',
+                '++mephisto.task.maximum_units_per_worker=0',
+                '++num_turns=3',
+                '++turn_timeout=300',
             ]
-            # TODO: remove all of these params once Hydra 1.1 is released with support
-            #  for recursive defaults
-            self._set_up_config(
-                blueprint_type=BLUEPRINT_TYPE,
-                task_directory=TASK_DIRECTORY,
-                overrides=overrides,
-            )
+            self._set_up_config(task_directory=TASK_DIRECTORY, overrides=overrides)
 
             # Set up the operator and server
             world_opt = {

@@ -66,7 +66,10 @@ class TestIntegrations(unittest.TestCase):
     def test_many_episode(self):
         examples = self._run_through('integration_tests:multiturn', 'flatten')
         for example in examples:
-            assert example['text'].replace('\n', ' ') == example['labels'][0]
+            texts = example['text'].split('\n')
+            labels = example['labels'][0].split(' ')
+            for i, l in enumerate(labels):
+                assert texts[2 * i] == l
 
 
 class TestSpecificMutators(unittest.TestCase):
@@ -159,9 +162,13 @@ class TestSpecificMutators(unittest.TestCase):
 
         # check there was a mutation
         assert ex1['text'] == "\n".join(e['text'] for e in [EXAMPLE1])
-        assert ex2['text'] == "\n".join(e['text'] for e in [EXAMPLE1, EXAMPLE2])
+        assert ex2['text'] == "\n".join(
+            [EXAMPLE1['text'], EXAMPLE1['labels'][0], EXAMPLE2['text']]
+        )
         assert ex3['text'] == "\n".join(e['text'] for e in [EXAMPLE3])
-        assert ex4['text'] == "\n".join(e['text'] for e in [EXAMPLE3, EXAMPLE4])
+        assert ex4['text'] == "\n".join(
+            [EXAMPLE3['text'], EXAMPLE3['labels'][0], EXAMPLE4['text']]
+        )
 
     def test_last_turn(self):
         from parlai.mutators.last_turn import LastTurnMutator
@@ -219,3 +226,63 @@ class TestSpecificMutators(unittest.TestCase):
         assert set(ex2['text'].split()) == set(EXAMPLE2['text'].split())
         assert set(ex3['text'].split()) == set(EXAMPLE3['text'].split())
         assert set(ex4['text'].split()) == set(EXAMPLE4['text'].split())
+
+    def test_msc_ltm_mutator(self):
+        from parlai.tasks.msc.mutators import LongTermMemoryMutator
+
+        ex1, ex2, ex3, ex4 = self._apply_mutator(LongTermMemoryMutator)
+
+        assert (
+            ex1['labels']
+            == ex2['labels']
+            == ex3['labels']
+            == ex4['labels']
+            == ['personal_knowledge']
+        )
+
+
+class TestMutatorStickiness(unittest.TestCase):
+    """
+    Test that mutations DO NOT stick with episode.
+    """
+
+    def test_not_sticky(self):
+        pp = ParlaiParser(True, False)
+        opt = pp.parse_kwargs(
+            task='integration_tests:multiturn',
+            mutators='flatten',
+            datatype='train:ordered',
+        )
+        teacher = create_task_agent_from_taskname(opt)[0]
+        first_epoch = []
+        second_epoch = []
+        for _ in range(teacher.num_examples()):
+            first_epoch.append(teacher.act())
+        teacher.reset()
+        for _ in range(teacher.num_examples()):
+            second_epoch.append(teacher.act())
+
+        assert all(f == s for f, s in zip(first_epoch, second_epoch))
+
+
+class TestUniqueness(unittest.TestCase):
+    """
+    Test that mutators cannot have duplicate names.
+    """
+
+    def test_uniqueness(self):
+        from parlai.core.mutators import register_mutator, Mutator
+
+        @register_mutator("test_unique_mutator")
+        class Mutator1(Mutator):
+            pass
+
+        # don't freak out if we accidentally register the exact same class twice
+        register_mutator("test_unique_mutator")(Mutator1)
+
+        # but do demand uniqueness
+        with self.assertRaises(NameError):
+
+            @register_mutator("test_unique_mutator")
+            class Mutator2(Mutator):
+                pass

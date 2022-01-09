@@ -91,7 +91,7 @@ task_list = [
         "task": "bot_adversarial_dialogue",
         "tags": [],
         "description": (
-            "Datasets described in the paper Recipes for Safety in Open-domain Chatbots."
+            "Datasets described in the paper Recipes for Safety in Open-domain Chatbots. "
             "Datasets consist of classification tasks in which the goal is to "
             "determine if the utterance is offensive or not given a dialogue context. "
         ),
@@ -123,6 +123,21 @@ task_list = [
         ),
         "links": {
             "website": "https://ai.google/tools/datasets/coached-conversational-preference-elicitation"
+        },
+    },
+    {
+        "id": "CMU_DoG",
+        "display_name": "CMU Document Grounded Conversations",
+        "task": "cmu_dog",
+        "tags": ["ChitChat", "Grounded"],
+        "description": (
+            "A document grounded dataset for text conversations, where the "
+            "documents are Wikipedia articles about popular movies. Consists "
+            "of 4112 conversations with an average of 21.43 turns per conversation."
+        ),
+        "links": {
+            "arXiv": "https://arxiv.org/abs/1809.07358",
+            "github": "https://github.com/festvox/datasets-CMU_DoG",
         },
     },
     {
@@ -274,12 +289,27 @@ task_list = [
         "links": {"arXiv": "https://arxiv.org/abs/1706.05125"},
     },
     {
+        "id": "Glue",
+        "display_name": "Glue",
+        "task": "glue",
+        "tags": [],
+        "description": (
+            "GLUE, the General Language Understanding Evaluation benchmark is "
+            "a collection of resources for training, evaluating, and analyzing "
+            "natural language understanding systems."
+        ),
+        "links": {
+            "website": "https://gluebenchmark.com/",
+            "website2": "https://huggingface.co/datasets/glue",
+        },
+    },
+    {
         "id": "HotpotQA",
         "display_name": "HotpotQA",
         "task": "hotpotqa",
         "tags": ["QA"],
         "description": (
-            "HotpotQA is a dataset for multi-hop question answering."
+            "HotpotQA is a dataset for multi-hop question answering. "
             "The overall setting is that given some context paragraphs"
             "(e.g., a few paragraphs, or the entire Web) and a question,"
             "a QA system answers the question by extracting a span of text"
@@ -289,12 +319,20 @@ task_list = [
         "links": {"arXiv": "https://arxiv.org/abs/1809.09600"},
     },
     {
+        "id": "HuggingFace",
+        "display_name": "HuggingFace",
+        "task": "huggingface",
+        "tags": [],
+        "description": ("HuggingFace datasets"),
+        "links": {"website": "https://huggingface.co/"},
+    },
+    {
         "id": "LIGHT-Dialogue",
         "display_name": "LIGHT-Dialogue",
         "task": "light_dialog",
         "tags": ["Grounded", "Dodeca"],
         "description": (
-            "LIGHT is a text adventure game with actions and dialogue collected."
+            "LIGHT is a text adventure game with actions and dialogue collected. "
             "The source data is collected between crowdworkers playing the game."
         ),
         "links": {
@@ -308,7 +346,7 @@ task_list = [
         "task": "light_dialog_wild",
         "tags": ["Grounded", "LIGHT"],
         "description": (
-            " LIGHT is a text adventure game with actions and dialogue."
+            " LIGHT is a text adventure game with actions and dialogue. "
             "The WILD dataset here features 41,131+ training episodes of dialogue "
             "collected from deploying a game as described in "
         ),
@@ -521,17 +559,6 @@ task_list = [
         "links": {"arXiv": "https://arxiv.org/abs/1808.07036"},
     },
     {
-        "id": "SelfFeedingChatbot",
-        "display_name": "Self-Feeding Chatbot",
-        "task": "self_feeding",
-        "tags": [],
-        "description": (
-            "Learning from Dialogue after Deployment. Leveraging user textual "
-            "feedback to improve the chatbot's abilities."
-        ),
-        "links": {"arXiv": "https://arxiv.org/abs/1901.05415"},
-    },
-    {
         "id": "SimpleQuestions",
         "display_name": "Simple Questions",
         "task": "simplequestions",
@@ -574,6 +601,22 @@ task_list = [
             "Wikipedia."
         ),
         "links": {"arXiv": "https://arxiv.org/abs/1606.05250"},
+    },
+    {
+        "id": "SuperGLUE",
+        "display_name": "SuperGLUE",
+        "task": "superglue",
+        "tags": [],
+        "description": (
+            "SuperGLUE (https://super.gluebenchmark.com/) is a new benchmark "
+            "styled after GLUE with a new set of more difficult language "
+            "understanding tasks, improved resources, and a new public "
+            "leaderboard."
+        ),
+        "links": {
+            "website": "https://super.gluebenchmark.com/",
+            "website2": "https://huggingface.co/datasets/super_glue",
+        },
     },
     {
         "id": "TriviaQA",
@@ -827,11 +870,23 @@ task_list = [
             "A chit-chat dataset by GoogleAI providing high quality goal-oriented conversations"
             "The dataset hopes to provoke interest in written vs spoken language"
             "Both the datasets consists of two-person dialogs:"
-            "Spoken: Created using Wizard of Oz methodology."
+            "Spoken: Created using Wizard of Oz methodology. "
             "Written: Created by crowdsourced workers who were asked to write the "
             "full conversation themselves playing roles of both the user and assistant."
         ),
         "links": {"website": "https://ai.google/tools/datasets/taskmaster-1"},
+    },
+    {
+        "id": "MSR-E2E",
+        "display_name": "MSR End-to-End",
+        "task": "msr_e2e",
+        "tags": ["ChitChat"],
+        "description": (
+            "MSR-E2E is a dataset of human-human conversations in which one "
+            "human plays the role of an Agent and the other one plays the role"
+            "of a User. Data is collected from Amazon Mechanical Turk. "
+        ),
+        "links": {"website": "https://github.com/xiul-msr/e2e_dialog_challenge"},
     },
     {
         "id": "Twitter",
@@ -1089,7 +1144,7 @@ task_list = [
         "tags": ["ChitChat", "Dodeca"],
         "description": (
             "A dataset of 25k conversations grounded in emotional situations "
-            "to facilitate training and evaluating dialogue systems."
+            "to facilitate training and evaluating dialogue systems. "
             "Dataset has been released under the CC BY-NC license."
         ),
         "links": {"arXiv": "https://arxiv.org/abs/1811.00207"},
@@ -1121,6 +1176,20 @@ task_list = [
         "links": {"arXiv": "https://arxiv.org/abs/1908.06083"},
     },
     {
+        "id": "MultiDoGo",
+        "display_name": "MultiDoGo",
+        "task": "multidogo",
+        "tags": ["TOD"],
+        "description": (
+            "MultiDoGo is a large task-oriented dataset from Amazon collected "
+            "in a Wizard of Oz fashion, using both crowd and expert annotators "
+            "with annotations at varying levels of granularity."
+        ),
+        "links": {
+            "website": "https://github.com/awslabs/multi-domain-goal-oriented-dialogues-dataset"
+        },
+    },
+    {
         "id": "MultiWOZv2.0",
         "display_name": "MultiWOZ 2.0",
         "task": "multiwoz_v20",
@@ -1141,6 +1210,19 @@ task_list = [
             "over multiple domains and topics."
         ),
         "links": {"website": "http://dialogue.mi.eng.cam.ac.uk/index.php/corpus/"},
+    },
+    {
+        "id": "MultiWOZv2.2",
+        "display_name": "MultiWOZ 2.2",
+        "task": "multiwoz_v22",
+        "tags": ["Goal"],
+        "description": (
+            "A fully labeled collection of human-written conversations spanning"
+            "over multiple domains and topics. Schemas are included."
+        ),
+        "links": {
+            "website": "https://github.com/budzianowski/multiwoz/tree/master/data/MultiWOZ_2.2"
+        },
     },
     {
         "id": "SelfChat",
@@ -1312,6 +1394,17 @@ task_list = [
         ),
     },
     {
+        "id": "GoogleSGDSimulationSplits",
+        "display_name": "GoogleSGD Simulation Splits",
+        "task": "google_sgd_simulation_splits",
+        "tags": ["Goal"],
+        "description": (
+            "Custom processing of the Google SGD dataset into In-Domain and "
+            "Out-of-Domain splits for the use of zero and few-shotting with "
+            "other task-oriented data."
+        ),
+    },
+    {
         "id": "TaskMaster2",
         "display_name": "TaskMaster2",
         "task": "taskmaster2",
@@ -1319,6 +1412,15 @@ task_list = [
         "description": (
             "The second version of TaskMaster, containing Wizard-of-Oz dialogues "
             "for task oriented dialogue in 7 domains."
+        ),
+    },
+    {
+        "id": "TaskMaster3",
+        "display_name": "TicketTalk (Taskmaster3)",
+        "task": "taskmaster3",
+        "tags": ["Goal"],
+        "description": (
+            "Taskmaster3 is a dataset of movie ticket dialogues collected in a self-chat manner. To induce conversational variety, crowd workers were asked to generate conversations given dozens of different instructions of different level of specificity, some purposefully including conversational  errors."
         ),
     },
     {
@@ -1360,5 +1462,78 @@ task_list = [
         "tags": ["ChitChat", "Entailment"],
         "description": "Task for detect whether the last utterance contradicts previous dialogue history.",
         "links": {"arXiv": "https://arxiv.org/abs/2012.13391"},
+    },
+    {
+        "id": "metalwoz",
+        "display_name": "MetaLWOz",
+        "task": "metalwoz",
+        "tags": ["Goal"],
+        "description": (
+            "Meta-Learning Wizard-of-Oz (MetaLWOz) is a dataset designed to help "
+            "develop models capable of predicting user responses in unseen domains."
+        ),
+        "links": {
+            "paper": "http://workshop.colips.org/dstc7/dstc8/DTSC8_multidomain_task_proposal.pdf",
+            "website": "https://www.microsoft.com/en-us/research/project/metalwoz/",
+        },
+    },
+    {
+        "id": "Wizard_of_Internet",
+        "display_name": "Wizard_of_Internet",
+        "task": "wizard_of_internet",
+        "tags": ["ChitChat"],
+        "description": (
+            "A dataset with conversations directly grounded with knowledge "
+            "retrieved from internet. One of the participants has access to internet search. "
+            "The other side has an assigned persona that provides the topic of the conversation. "
+            "Contains 93.7k utterances from 9.6k conversations, split into train, "
+            "test, and valid sets."
+        ),
+    },
+    {
+        "id": "msc",
+        "display_name": "MultiSessionChat",
+        "task": "msc",
+        "tags": ["ChitChat"],
+        "description": (
+            "A multi-session human-human chit-chat dataset consist of session 2-5 follow up from PersonaChat "
+            "It contains 5k full converesations from session 2 to session 5 (session 1 being PersonaChat) "
+        ),
+    },
+    {
+        "id": "jericho_world",
+        "display_name": "JerichoWorld",
+        "task": "jericho_world",
+        "tags": [],
+        "description": (
+            "Jericho World dataset: common sense in a text-based game. "
+            "The goal is generating the knowledge graph of the game state "
+            "or the set of valid actions from the text descriptions of the world."
+        ),
+    },
+    {
+        "id": "CaSiNo",
+        "display_name": "CaSiNo (CampSite Negotiation Dialogues)",
+        "task": "casino",
+        "tags": ["Negotiation"],
+        "description": (
+            "A dataset of 1030 negotiation dialogues. Two participants take the role of campsite neighbors and negotiate for Food, Water, and Firewood packages, based on their individual preferences and requirements."
+        ),
+        "links": {
+            "paper": "https://aclanthology.org/2021.naacl-main.254.pdf",
+            "website": "https://github.com/kushalchawla/CaSiNo",
+        },
+    },
+    {
+        "id": "SaFeRDialogues",
+        "display_name": "SaFeRDialogues",
+        "task": "saferdialogues",
+        "tags": [],
+        "description": (
+            "A dataset of 8k dialogues demonstrating safety failures, feedback "
+            "signaling them, and a response acknowledging the feedback. "
+            "Dataset has been released under the CC BY-NC license."
+        ),
+        "links": {"arXiv": "https://arxiv.org/abs/2110.07518"},
     },
 ]

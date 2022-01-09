@@ -66,11 +66,6 @@ class RewardUnlikelihoodAgentTrait(object):
         grp.add_argument('--alpha', default=1.0, type=float)
         return parser
 
-    def _dummy_batch(self, batchsize, maxlen):
-        batch = super()._dummy_batch(batchsize, maxlen)
-        batch['rewards'] = torch.ones(batchsize, dtype=torch.long).cuda()
-        return batch
-
     def compute_loss(self, batch, return_output=False):
         if batch.label_vec is None:
             raise ValueError('Cannot compute loss without a label.')
@@ -185,7 +180,7 @@ class RepetitionUnlikelihoodAgentTrait(object):
             beam_pred_scores, _ = self._generate(batch, self.beam_size, maxlen)
 
         # forward pass to create graph for beam search case
-        generations = [g[1:] for (g, s) in beam_pred_scores]
+        generations = [g[1:] for (g, s, _) in beam_pred_scores]
         pred_toks = torch.nn.utils.rnn.pad_sequence(generations, batch_first=True)
         model_output = self.model(*self._model_input(batch), ys=pred_toks)
         logits, preds, _ = model_output
@@ -423,7 +418,7 @@ class SequenceVocabUnlikelihoodAgentTrait(_VocabUnlikelihoodTrait):
             )
 
             # forward pass to create graph for beam search case
-            generations = [g for (g, s) in beam_pred_scores]
+            generations = [g for (g, s, _) in beam_pred_scores]
             gentoks = torch.nn.utils.rnn.pad_sequence(
                 generations, batch_first=True, padding_value=self.NULL_IDX
             )

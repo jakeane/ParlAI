@@ -31,7 +31,7 @@ pseudo-code as its parley:
 
 :::{note}
 This is only pseudo-code, but the
-[real code](https://github.com/facebookresearch/ParlAI/blob/master/parlai/core/worlds.py)
+[real code](https://github.com/facebookresearch/ParlAI/blob/main/parlai/core/worlds.py)
 is reasonably easy to read, even for newcomers.
 :::
 
@@ -126,7 +126,7 @@ class PseudoAgent(Agent):
 :::{note} Real implementations
 The above is really just a very simple example. You may find it illuminating to
 read the implementation of
-[UnigramAgent](https://github.com/facebookresearch/ParlAI/blob/master/parlai/agents/unigram/unigram.py)
+[UnigramAgent](https://github.com/facebookresearch/ParlAI/blob/main/parlai/agents/unigram/unigram.py)
 or even [TorchAgent](parlai.core.torch_agent.TorchAgent).
 :::
 
@@ -205,7 +205,7 @@ We continue with the implementation of parley:
             # produce a model response
             model_act = self.model_copies[i].act()
             # compute any metrics of the response
-            self.teacher_copies[i].observe(model_act)   
+            self.teacher_copies[i].observe(model_act)
 ```
 
 <center>
@@ -263,12 +263,24 @@ Tip: if you implement `batch_act()`, your `act()` method can just call
 list of length 1.
 :::
 
+:::{tip} Agent Convenience Functions
+Tip: Having implemented `batch_act()` and `act()`, you can make use of the agent convenience functions `batch_respond()` and `respond()` which provide the agent's response to messages by internally calling `batch_act()` and `act()` respectively. The function signatures are as follows:
+
+```python
+def respond(self, text_or_message: Union[str, Message], **other_message_fields) -> str:
+    pass
+
+def batch_respond(self, messages: List[Message]) -> List[str]:
+    pass
+```
+:::
+
 ## Dynamic Batching
 
 :::{note}
 This is only a sketch. The real code is more complicated, but advanced users
 may be interested in
-[reading it](https://github.com/facebookresearch/ParlAI/blob/master/parlai/core/worlds.py).
+[reading it](https://github.com/facebookresearch/ParlAI/blob/main/parlai/core/worlds.py).
 :::
 
 As a final diversion, we'll discuss at a high level of how Dynamic Batching
@@ -372,4 +384,3 @@ from 4 to only 2! This is the trick of how dynamic batching can provide
 :::{tip}
 You can use this mode with `-dynb full` or `--dynamic-batching full`.
 :::
-

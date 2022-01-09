@@ -21,7 +21,7 @@ import torch
 from mephisto.operations.hydra_config import register_script_config
 from mephisto.operations.operator import Operator
 from mephisto.tools.scripts import load_db_and_process_config
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from parlai.crowdsourcing.tasks.acute_eval.analysis import (
     AcuteAnalyzer,
@@ -43,9 +43,13 @@ from parlai.scripts.self_chat import self_chat, setup_args as self_chat_setup_ar
 from parlai.utils.strings import normalize_reply
 from parlai.utils.testing import capture_output
 
+_ = FAST_ACUTE_BLUEPRINT_TYPE
+
 ########################
 # ACUTE EVAL CONSTANTS #
 ########################
+
+FAST_ACUTE_CONFIG_NAME = "example_fast_acute"
 
 ACUTE_EVAL_TYPES = {
     'human': {
@@ -57,6 +61,11 @@ ACUTE_EVAL_TYPES = {
         'question': 'Who would you prefer to talk to for a long conversation?',
         's1_choice': 'I would prefer to talk to <Speaker 1>',
         's2_choice': 'I would prefer to talk to <Speaker 2>',
+    },
+    'interesting': {
+        'question': 'If you had to say one of these speakers is interesting and one is boring, who would you say is more interesting?',
+        's1_choice': '<Speaker 1> is more interesting',
+        's2_choice': '<Speaker 2> is more interesting',
     },
     'roleplay': {
         'question': 'How well does the speaker play their role in the conversation?',
@@ -75,6 +84,8 @@ class FastAcuteExecutor(object):
     """
     Execute fast ACUTE runs.
     """
+
+    ANALYZER = AcuteAnalyzer
 
     def __init__(self, args: DictConfig, model_config: Optional[Dict[str, Any]] = None):
         """
@@ -121,7 +132,7 @@ class FastAcuteExecutor(object):
             and self.fast_acute_args.model_pairs is None
         ):
             raise RuntimeError(
-                'Either models or model-pairs should be set for comparision.'
+                'Either models or model-pairs should be set for comparison.'
             )
         if self.fast_acute_args.model_pairs is not None:
             model_pairs = self.fast_acute_args.model_pairs.split(',')
@@ -268,6 +279,10 @@ class FastAcuteExecutor(object):
         # (1) a model is specified in the config, meaning that we're collecting
         #   self-chats with that model
         # (2) we manually set 'is_selfchat' to True in the config
+        if is_selfchat:
+            # Set which speaker we will evaluate the conversation turns of
+            speaker_idx = self.model_config[model].get('speaker_idx', 0)
+            assert speaker_idx in [0, 1]
         conversation = {'context': [], 'dialogue': [], 'speakers': []}
         dialog = dialogue_dict['dialog']
         for act_pair in dialog:
@@ -276,7 +291,7 @@ class FastAcuteExecutor(object):
                     conversation['context'].append(ex)
                     continue
                 if is_selfchat:
-                    speaker_id = model if i == 0 else f'other_speaker'
+                    speaker_id = model if i == speaker_idx else f'other_speaker'
                 else:
                     speaker_id = ex['id']
                 if speaker_id not in conversation['speakers']:
@@ -329,12 +344,15 @@ class FastAcuteExecutor(object):
             self.fast_acute_args.matchups_per_pair
             * self.fast_acute_args.sufficient_matchups_multiplier
         )
-        # Write random pairs of conversations
+        # Write pairs of conversations
         for model_pair in self.combos:
-            for _ in range(pairs_per_model):
-                conversation_indices = [
-                    random.choice(range(len(conversations[m]))) for m in model_pair
-                ]
+            for i in range(pairs_per_model):
+                if self.fast_acute_args.randomize_conversations:
+                    conversation_indices = [
+                        random.choice(range(len(conversations[m]))) for m in model_pair
+                    ]
+                else:
+                    conversation_indices = [i for _ in model_pair]
                 pair = []
                 pair_ids = []
                 for i, c_id in enumerate(conversation_indices):
@@ -469,6 +487,7 @@ class FastAcuteExecutor(object):
         self.set_up_acute_eval()
         db, cfg = load_db_and_process_config(self.args)
         print(f'*** RUN ID: {cfg.mephisto.task.task_name} ***')
+        print(f'\nHydra config:\n{OmegaConf.to_yaml(cfg)}')
         operator = Operator(db)
         operator.validate_and_run_config(run_config=cfg.mephisto, shared_state=None)
         operator.wait_for_runs_then_shutdown(
@@ -529,7 +548,7 @@ class FastAcuteExecutor(object):
             }
         )
 
-        analyzer = AcuteAnalyzer(opt)
+        analyzer = self.ANALYZER(opt)
         self.results = analyzer.get_matchup_totals_with_significance()
         analyzer.save_results()
 
@@ -537,13 +556,7 @@ class FastAcuteExecutor(object):
         self._print_progress(f'ACUTE results saved to {self.results_path}')
 
 
-defaults = [
-    {"mephisto/blueprint": FAST_ACUTE_BLUEPRINT_TYPE},
-    {"mephisto/architect": "local"},
-    {"mephisto/provider": "mock"},
-    'conf/base_fast_acute',
-    {"conf": "example_fast_acute"},
-]
+defaults = ['_self_', {"conf": FAST_ACUTE_CONFIG_NAME}]
 
 
 @dataclass
@@ -561,7 +574,7 @@ class TestScriptConfig(MTurkRunScriptConfig):
 register_script_config(name='fast_acute_scriptconfig', module=TestScriptConfig)
 
 
-@hydra.main(config_name="fast_acute_scriptconfig")
+@hydra.main(config_path="hydra_configs", config_name="fast_acute_scriptconfig")
 def main(cfg: DictConfig) -> None:
 
     runner = FastAcuteExecutor(cfg)

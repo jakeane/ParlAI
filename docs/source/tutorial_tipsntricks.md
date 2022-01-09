@@ -79,6 +79,18 @@ parlai display_data --task light_dialog:light_label_type=speech,light_dialog:lig
 That is, by adding a colon ":" followed by the flag name, an equals
 sign, and the value. You can add multiple flags, all separated by ":".
 
+Agent Convenience Functions
+----------
+Tip: Having implemented `batch_act()` and `act()`, you can make use of the agent convenience functions `batch_respond()` and `respond()` which provide the agent's response to messages by internally calling `batch_act()` and `act()` respectively. The function signatures are as follows:
+
+```python
+def respond(self, text_or_message: Union[str, Message], **other_message_fields) -> str:
+    pass
+
+def batch_respond(self, messages: List[Message]) -> List[str]:
+    pass
+```
+
 Self-Chats
 ----------
 
@@ -94,7 +106,7 @@ This will generate 10 self-chats between 2 poly-encoder models with persona cont
 Flags to generate and store the self-chat:
 
 - `--num-self-chats` specify the number of self-chats to generate (1 by default).
-- `--selfchat-max-turns` specify the number of self-chat turns (6 by default), including context turn, seeded-utterance turns. Some self-chat world includes context information (such as persona; Wizard of Wikipedia(WoW) topics) in addition to the model utterances. 
+- `--selfchat-max-turns` specify the number of self-chat turns (6 by default), including context turn, seeded-utterance turns. Some self-chat world includes context information (such as persona; Wizard of Wikipedia(WoW) topics) in addition to the model utterances.
 - `--selfchat-task` specify whether to create a self-chat version of the task. If True (by default), it allows for loading contexts and openers that seed the self-chat.
 - `--outfile` specify file to save self-chat logs.
 - `--save-format` specify the format to save self-chat logs in. Use `conversations` for jsonl format, or `parlai` for text format (`conversations` by default).
@@ -105,13 +117,13 @@ Flags to generate and store the self-chat:
 Self-Chat World
 
 If the self-chat needs additional context to start with, e.g. persona, topics, one can specify it with `-t <task_name>` (in the above case "convai2") which links to a ParlAI world in the task world module `parlai.tasks.{task_name}.worlds` that handles the particular nature of interactions, e.g.
-[here](https://github.com/facebookresearch/ParlAI/blob/master/parlai/tasks/convai2/worlds.py#L98)
+[here](https://github.com/facebookresearch/ParlAI/blob/main/parlai/tasks/convai2/worlds.py#L98)
 or
-[here](https://github.com/facebookresearch/ParlAI/blob/master/parlai/tasks/wizard_of_wikipedia/worlds.py#L106).
+[here](https://github.com/facebookresearch/ParlAI/blob/main/parlai/tasks/wizard_of_wikipedia/worlds.py#L106).
 
 The base [SelfChatWorld](https://github.com/facebookresearch/ParlAI/blob/selfchat_feature/parlai/tasks/self_chat/worlds.py#L52) consists of:
-- ` contexts ` specify [context](https://github.com/facebookresearch/ParlAI/blob/master/parlai/tasks/self_chat/worlds.py#L135) information such as persona, topics, sometimes initial utterances.
-- ` _opener` consists of [seeded messages](https://github.com/facebookresearch/ParlAI/blob/master/parlai/tasks/self_chat/worlds.py#L146) from the task.
+- ` contexts ` specify [context](https://github.com/facebookresearch/ParlAI/blob/main/parlai/tasks/self_chat/worlds.py#L135) information such as persona, topics, sometimes initial utterances.
+- ` _opener` consists of [seeded messages](https://github.com/facebookresearch/ParlAI/blob/main/parlai/tasks/self_chat/worlds.py#L146) from the task.
 - [` parley()`](https://github.com/facebookresearch/ParlAI/blob/selfchat_feature/parlai/tasks/self_chat/worlds.py#L116) handles the logic of two agents interacting with each other with additional seeded contexts and/or utterances.
 
 
@@ -149,7 +161,7 @@ This handy script can prettify the display of json file of chats
 
 ```bash
 # Display conversation in HTML format.
-python parlai/scripts/convo_render.py -i projects/wizard_of_wikipedia/chat_example1.jsonl -o /tmp/chat.html 
+python parlai/scripts/convo_render.py -i projects/wizard_of_wikipedia/chat_example1.jsonl -o /tmp/chat.html
 ```
 
 Some additional flags that can be used for convo-render:
@@ -164,4 +176,4 @@ and tasks, create your own model zoo, and manage it all with a separate
 git repository.
 
 For more detailed instructions and features, see the
-[README](http://github.com/facebookresearch/ParlAI/blob/master/example_parlai_internal)
+[README](http://github.com/facebookresearch/ParlAI/blob/main/example_parlai_internal)

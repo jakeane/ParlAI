@@ -29,6 +29,24 @@ def setup_mutator_registry():
         return
     for module in pkgutil.iter_modules(parlai.mutators.__path__, 'parlai.mutators.'):
         importlib.import_module(module.name)
+    try:
+        import parlai_fb.mutators
+
+        for module in pkgutil.iter_modules(
+            parlai_fb.mutators.__path__, 'parlai_fb.mutators.'
+        ):
+            importlib.import_module(module.name)
+    except ImportError:
+        pass
+    try:
+        import parlai_internal.mutators
+
+        for module in pkgutil.iter_modules(
+            parlai_internal.mutators.__path__, 'parlai_internal.mutators.'
+        ):
+            importlib.import_module(module.name)
+    except ImportError:
+        pass
     setup_mutator_registry.loaded = True
     return MUTATOR_REGISTRY
 
@@ -40,6 +58,11 @@ def register_mutator(name: str) -> Callable[[Type], Type]:
 
     def _inner(cls_: Type) -> Type:
         global MUTATOR_REGISTRY
+        if name in MUTATOR_REGISTRY and cls_ is not MUTATOR_REGISTRY[name]:
+            raise NameError(
+                "Mutators must be uniquely named, but detected two mutators with "
+                f"the name '{name}'."
+            )
         MUTATOR_REGISTRY[name] = cls_
         return cls_
 
@@ -174,7 +197,7 @@ class EpisodeMutator(Mutator):
     @abc.abstractmethod
     def episode_mutation(self, episode: List[Message]) -> List[Message]:
         """
-        Abstract epsiode mutation.
+        Abstract episode mutation.
 
         The main method to implement when implementing an EpisodeMutator.
 
@@ -215,7 +238,7 @@ class ManyEpisodeMutator(Mutator):
         Abstract many-episode mutation.
 
         The main method to implement when creation a ManyEpisodeMutator.
-        You should map this episode to one-or-more episodes.
+        You should map this episode to zero-or-more episodes.
 
         If you wish to create multiple episodes, you need to output
         one-sublist-per-new-episode. As with EpisodeMutator, "episode_done"

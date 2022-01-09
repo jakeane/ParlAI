@@ -55,27 +55,48 @@ class FP16SafeCrossEntropy(torch.nn.Module):
         )
 
 
-def clip_grad_norm(params, max_norm):
+def clip_grad_norm(params, max_norm: float = 0, sync: bool = False):
     """
-    Clips grad norm.
+    Clips grad norms.
+
+    During combination with FSDP, will also ensure that grad norms are aggregated
+    across all workers, since each worker only stores their shard of the
+    gradients.
+
+    :param params:
+        Parameters whose gradients we wish to clip
+    :param max_norm:
+        Maximum norm we wish the gradients to have. If non-positive, then
+        we will not perform clipping.
+    :param sync:
+        Boolean indicating whether we should aggregate across the distributed
+        group. Used only in combination with FSDP.
+
+    :returns:
+        The gradient norm across all parameters, before clipping.
     """
     if isinstance(params, torch.Tensor):
         params = [params]
     # make sure any generators are expanded
     params = list(params)
-    if len(params) == 1:
-        p = params[0].grad
-        grad_norm = torch.norm(p)
-        if grad_norm > max_norm > 0:
-            clip_coef = max_norm / (grad_norm + 1e-6)
-            p.mul_(clip_coef)
-        return grad_norm
-    elif max_norm > 0:
+    # if syncing we need to manually perform the clipping so that we aggregrate
+    # properly
+    if max_norm > 0 and not sync:
         return torch.nn.utils.clip_grad_norm_(params, max_norm)
     else:
-        return torch.sqrt(
-            sum(p.grad.data.norm() ** 2 for p in params if p.grad is not None)
-        )
+        normsq = sum(p.grad.data.norm() ** 2 for p in params if p.grad is not None)
+        if sync:
+            # also need to get the norms from all the other sharded works in FSDP
+            import torch.distributed as dist
+
+            dist.all_reduce(normsq)
+        grad_norm = normsq.sqrt()
+        if max_norm > 0:
+            clip_coef = max_norm / (grad_norm + 1e-6)
+            for p in params:
+                p.grad.detach().mul_(clip_coef)
+
+        return grad_norm
 
 
 def has_overflow(grad_norm):
@@ -88,7 +109,7 @@ def has_overflow(grad_norm):
 
 
 class SafeFP16Optimizer(torch.optim.Optimizer):
-    def __init__(self, optimizer):
+    def __init__(self, optimizer, aggregate_gnorms=False):
         self.fp16_params = self._get_parameters(optimizer)
         self.fp32_params = self._build_fp32_params(self.fp16_params, flatten=False)
         self.optimizer = optimizer
@@ -103,6 +124,7 @@ class SafeFP16Optimizer(torch.optim.Optimizer):
 
         self.scaler = DynamicLossScaler(2.0 ** 15)
         self.min_loss_scale = 2 ** -5
+        self._aggregate_gnorms = aggregate_gnorms
 
     @classmethod
     def _get_parameters(cls, optimizer):
@@ -160,7 +182,7 @@ class SafeFP16Optimizer(torch.optim.Optimizer):
             self.scaler.loss_scale = state_dict['loss_scaler']
         self.optimizer.load_state_dict(state_dict)
 
-    def backward(self, loss, update_master_grads=False):
+    def backward(self, loss, update_main_grads=False):
         """
         Computes the sum of gradients of the given tensor w.r.t. graph leaves.
 
@@ -171,8 +193,8 @@ class SafeFP16Optimizer(torch.optim.Optimizer):
             loss = loss * self.scaler.loss_scale
         loss.backward()
         self._needs_sync = True
-        if update_master_grads:
-            self.update_master_grads()
+        if update_main_grads:
+            self.update_main_grads()
 
     def _sync_fp16_grads_to_fp32(self, multiply_grads=1.0):
         if self._needs_sync:
@@ -202,15 +224,17 @@ class SafeFP16Optimizer(torch.optim.Optimizer):
             for p32 in self.fp32_params:
                 p32.grad.data.mul_(c)
 
-    def update_master_grads(self):
+    def update_main_grads(self):
         self._sync_fp16_grads_to_fp32()
 
-    def clip_master_grads(self, max_norm):
+    def clip_main_grads(self, max_norm):
         """
         Clips gradient norm and updates dynamic loss scaler.
         """
         self._sync_fp16_grads_to_fp32()
-        grad_norm = clip_grad_norm(self.fp32_params, max_norm)
+        grad_norm = clip_grad_norm(
+            self.fp32_params, max_norm, sync=self._aggregate_gnorms
+        )
 
         # detect overflow and adjust loss scale
         if self.scaler is not None:
@@ -289,7 +313,7 @@ class DynamicLossScaler(object):
     <https://docs.nvidia.com/deeplearning/performance/mixed-precision-training/index.html#lossscaling>
 
     Shamelessly stolen and adapted from Fairseq.
-    <https://github.com/pytorch/fairseq/blob/master/fairseq/optim/fp16_optimizer.py>
+    <https://github.com/pytorch/fairseq/blob/main/fairseq/optim/fp16_optimizer.py>
     """
 
     def __init__(
@@ -371,7 +395,7 @@ class MemoryEfficientFP16Optimizer(torch.optim.Optimizer):
     This class wraps an optimizer to perform FP16 training.
     This implementation is heavily based on the Fairseq implementation
     of `MemoryEfficientFP16Optimizer`, which can be found here:
-    <https://github.com/pytorch/fairseq/blob/master/fairseq/optim/fp16_optimizer.py#L382>
+    <https://github.com/pytorch/fairseq/blob/main/fairseq/optim/fp16_optimizer.py#L382>
 
     This allows you to train bigger models on a single GPU, but can be unstable.
     Prefer the SafeFP16 implementation if you do not have concerns about memory.
@@ -390,6 +414,7 @@ class MemoryEfficientFP16Optimizer(torch.optim.Optimizer):
     def __init__(
         self,
         init_optimizer: torch.optim.Optimizer,  # type: ignore
+        aggregate_gnorms: bool = False,
         loss_initial_scale: float = 2.0 ** 17,
         min_loss_scale: float = 1e-4,
     ):
@@ -397,6 +422,8 @@ class MemoryEfficientFP16Optimizer(torch.optim.Optimizer):
         # TODO: set some of these args with opt
         self.min_loss_scale = min_loss_scale
         self.scaler = DynamicLossScaler(init_scale=loss_initial_scale)
+
+        self._aggregate_gnorms = aggregate_gnorms
 
     @staticmethod
     def compatible_optimizers():
@@ -439,14 +466,16 @@ class MemoryEfficientFP16Optimizer(torch.optim.Optimizer):
         else:
             assert multiply_grads == 1.0
 
-    def clip_master_grads(self, gradient_clip):
+    def clip_main_grads(self, gradient_clip):
         """
         Clips gradient norm and updates dynamic loss scaler.
 
         Returns -1 if the most recently computed gradients overflowed.
         """
         self._unscale_grads()
-        grad_norm = clip_grad_norm(self.params, gradient_clip)
+        grad_norm = clip_grad_norm(
+            self.params, gradient_clip, sync=self._aggregate_gnorms
+        )
         # detect overflow and adjust loss scale
         overflow = has_overflow(grad_norm)
         self.scaler.update_scale(overflow)
@@ -467,7 +496,7 @@ class MemoryEfficientFP16Optimizer(torch.optim.Optimizer):
 
         return grad_norm
 
-    def update_master_grads(self):
+    def update_main_grads(self):
         # No-op
         pass
 
@@ -482,7 +511,7 @@ class MemoryEfficientFP16Optimizer(torch.optim.Optimizer):
                 if p.grad is not None:
                     p.grad.data.mul_(c)
 
-    def backward(self, loss, update_master_grads=False):
+    def backward(self, loss, update_main_grads=False):
         """
         Computes the sum of gradients of the given tensor w.r.t. graph leaves.
 
@@ -648,7 +677,7 @@ class Adafactor(torch.optim.Optimizer):
     (see https://arxiv.org/abs/1804.04235)
 
     Taken from the fairseq implementation, which can be found here:
-    <https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py>.
+    <https://github.com/pytorch/fairseq/blob/main/fairseq/optim/adafactor.py>.
 
     :param params (iterable):
         iterable of parameters to optimize or dicts defining parameter groups

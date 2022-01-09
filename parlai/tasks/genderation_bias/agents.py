@@ -142,7 +142,7 @@ class ControllableTaskTeacher(FixedDialogTeacher):
         """
         Load list of explicitly gendered words.
 
-        Words taken from <https://github.com/uclanlp/gn_glove/blob/master/wordlist/>.
+        Words taken from <https://github.com/uclanlp/gn_glove/blob/main/wordlist/>.
 
         Examples include brother, girl, actress, husbands, etc.
         """
@@ -257,7 +257,7 @@ class ControllableTaskTeacher(FixedDialogTeacher):
 
         if opt['invalidate_cache']:
             # invalidate the cache and remove the existing data
-            logging.warn(
+            logging.warning(
                 f' [ WARNING: invalidating cache at {self.save_path} and rebuilding the data. ]'
             )
             if self.save_path == most_recent:
@@ -285,7 +285,7 @@ class ControllableTaskTeacher(FixedDialogTeacher):
                 f.write(json_data)
             logging.info(f'[ Data successfully saved to path: {self.save_path} ]')
         except Exception:
-            logging.warn('Data is not json serializable; not saving')
+            logging.warning('Data is not json serializable; not saving')
 
     def get(self, episode_idx: int, entry_idx: int = 0) -> Message:
         """
