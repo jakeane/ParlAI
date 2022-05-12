@@ -42,18 +42,19 @@ class MessengerBotChatTaskWorld(World):
         self.model = bot
         self.first_time = True
 
-        try:
-            for exchange in agent.prior_history:
-                if exchange.get('user', ''):
-                    self.model.observe({'episode_done': False, 'text': exchange['user']})
+        # print('updating user history:', agent.prior_history)
+        # try:
+        #     for exchange in agent.prior_history:
+        #         if exchange.get('user', ''):
+        #             self.model.observe({'episode_done': False, 'text': exchange['user']})
 
-                if exchange.get('bot', ''):
-                    self.model.self_observe({'text': exchange['bot']})
-                else:
-                    resp = self.model.act()
-                    self.agent.observe(resp)
-        except:
-            pass
+        #         if exchange.get('bot', ''):
+        #             self.model.self_observe({'text': exchange['bot']})
+        #         else:
+        #             resp = self.model.act()
+        #             self.agent.observe(resp)
+        # except:
+        #     pass
 
     @staticmethod
     def generate_world(opt, agents):
@@ -84,6 +85,21 @@ class MessengerBotChatTaskWorld(World):
             self.first_time = False
         a = self.agent.act()
         if a is not None:
+            if 'payload' in a and a['payload'].get('type', None) == 'init':
+                for exchange in a['payload'].get('data', []):
+                    if exchange.get('user', ''):
+                        self.model.observe({'episode_done': False, 'text': exchange['user']})
+
+                    if exchange.get('bot', ''):
+                        self.model.self_observe({'text': exchange['bot']})
+                    else:
+                        resp = self.model.act()
+                        self.agent.observe(resp)
+                        return
+            elif 'payload' in a and a['payload'].get('type', None) == 'update':
+                additional_message = a['payload'].get('data', '')
+                if additional_message:
+                    self.model.history.update_reply(additional_message)
             if '[DONE]' in a['text']:
                 self.episodeDone = True
             elif '[RESET]' in a['text']:

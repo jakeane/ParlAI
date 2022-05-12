@@ -317,6 +317,30 @@ class History(object):
                 self.history_vecs.pop(0)
         self.history_vecs.append(self.parse(text))
 
+    def update_reply(self, text):
+        self.history_strings.pop()
+        last_raw_text = self.history_raw_strings.pop()
+        self.history_vecs.pop()
+
+        combined_raw_text = self._concat_messages(last_raw_text, text)
+        if self.add_person_tokens:
+            combined_text = self._add_person_tokens(combined_raw_text, self.p2_token)
+        else:
+            combined_text = combined_raw_text
+
+        self.history_raw_strings.append(combined_raw_text)
+        self.history_strings.append(combined_text)
+        self.history_vecs.append(self.parse(combined_text))
+
+    def _concat_messages(self, text1: str, text2: str):
+        text1 = text1.strip()
+        text2 = text2.strip()
+
+        addPeriod = text1 and not (text1.endswith('!') or text1.endswith('?') or text1.endswith('.'))
+        periodStr = '.' if addPeriod else ''
+
+        return f'{text1}{periodStr} {text2}'
+
     def add_reply(self, text):
         """
         Add your own response to the history.
